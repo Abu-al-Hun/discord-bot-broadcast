@@ -28,11 +28,11 @@ Before running the bot, make sure you have the following:
 
 1. Clone this repository:
    ```bash
-   git clone <repository_url>
+   git clone https://github.com/Abu-al-Hun/discord-bot-broadcast.git
    ```
 2. Navigate to the project directory:
    ```bash
-   cd <project_directory>
+   cd discord-bot-broadcast
    ```
 3. Install the required dependencies:
    ```bash
@@ -73,8 +73,13 @@ Starts the broadcast process and presents interactive options to the user. The a
 - **Batch Processing**: Messages are sent in batches of 10 with a delay of 10 seconds between each batch.
 - **Error Handling**: Handles cases where members have DMs disabled.
 
+## Links
+- [GitHub Repository](https://github.com/Abu-al-Hun/discord-bot-broadcast)
+- [Live Project on Glitch](https://glitch.com/~discord-bot-broadcast)
+
 ## Dependencies
 - [discord.js](https://www.npmjs.com/package/discord.js)
 
 ## License
 This project is licensed under the MIT License. Feel free to use and modify it as needed.
+
