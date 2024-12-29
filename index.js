@@ -1,9 +1,9 @@
-const { 
-  Client, 
-  Intents, 
-  Permissions, 
-  MessageEmbed, 
-  MessageActionRow, 
+const {
+  Client,
+  Intents,
+  Permissions,
+  MessageEmbed,
+  MessageActionRow,
   MessageButton,
   Modal,
   TextInputComponent
@@ -22,23 +22,15 @@ const client = new Client({
 });
 
 const prefix = config.prefix;
-const BATCH_SIZE = 10;
-const BATCH_DELAY = 10000;
-const MAX_MESSAGES_PER_MINUTE = 190;
+const MESSAGE_RATE = 2;
+const MESSAGE_DELAY = 1000 / MESSAGE_RATE;
+
 let messageQueue = [];
 let isProcessing = false;
-let messagesSentLastMinute = 0;
-let lastMessageTimestamp = Date.now();
-
-setInterval(() => {
-  messagesSentLastMinute = 0;
-  lastMessageTimestamp = Date.now();
-}, 60000);
 
 client.once('ready', () => {
-    console.log(`Wick® Studio`);
-    console.log(`discord.gg/wicks`);  
-    console.log(`Bot is ready! Logged in as ${client.user.tag}`);
+  console.log(`✅ Bot is ready! Logged in as ${client.user.tag}`);
+  console.log(`🌐 discord.gg/wicks`);
 });
 
 client.on('messageCreate', async message => {
@@ -49,39 +41,38 @@ client.on('messageCreate', async message => {
 
   if (command === 'bc') {
     if (!message.member.roles.cache.has(config.adminRole)) {
-      return message.reply('عذراً، أنت لا تملك الرتبة المطلوبة لاستخدام هذا الأمر');
+      return message.reply('❌ عذراً، أنت لا تملك الصلاحيات لاستخدام هذا الأمر.');
     }
 
     const broadcastEmbed = new MessageEmbed()
       .setTitle('🔊 نظام البرودكاست')
-      .setDescription('اختر نوع البرودكاست الذي تريد إرساله')
+      .setDescription('اختر نوع البرودكاست الذي تريد إرساله:')
       .setColor('#0099ff')
       .setImage(config.embedImage)
       .setTimestamp();
 
-    const row = new MessageActionRow()
-      .addComponents(
-        new MessageButton()
-          .setCustomId('broadcast-all')
-          .setLabel('إرسال للجميع')
-          .setStyle('PRIMARY')
-          .setEmoji('📢'),
-        new MessageButton()
-          .setCustomId('broadcast-online')
-          .setLabel('إرسال للمتصلين')
-          .setStyle('SUCCESS')
-          .setEmoji('🟢'),
-        new MessageButton()
-          .setCustomId('broadcast-offline')
-          .setLabel('إرسال للغير متصلين')
-          .setStyle('DANGER')
-          .setEmoji('⭕'),
-        new MessageButton()
-          .setCustomId('broadcast-specific')
-          .setLabel('إرسال لشخص معين')
-          .setStyle('SECONDARY')
-          .setEmoji('👤')
-      );
+    const row = new MessageActionRow().addComponents(
+      new MessageButton()
+        .setCustomId('broadcast-all')
+        .setLabel('إرسال للجميع')
+        .setStyle('PRIMARY')
+        .setEmoji('📢'),
+      new MessageButton()
+        .setCustomId('broadcast-online')
+        .setLabel('إرسال للمتصلين')
+        .setStyle('SUCCESS')
+        .setEmoji('🟢'),
+      new MessageButton()
+        .setCustomId('broadcast-offline')
+        .setLabel('إرسال للغير متصلين')
+        .setStyle('DANGER')
+        .setEmoji('⭕'),
+      new MessageButton()
+        .setCustomId('broadcast-specific')
+        .setLabel('إرسال لشخص معين')
+        .setStyle('SECONDARY')
+        .setEmoji('👤')
+    );
 
     await message.channel.send({
       embeds: [broadcastEmbed],
@@ -95,79 +86,42 @@ async function processMessageQueue() {
 
   isProcessing = true;
   const currentTask = messageQueue[0];
-  
-  try {
-    await sendMessagesToBatch(
-      currentTask.members,
-      currentTask.message,
-      currentTask.interaction,
-      currentTask.startIndex
-    );
-  } catch (error) {
-    console.error('Error processing message queue:', error);
-  }
-}
 
-async function sendMessagesToBatch(members, message, interaction, startIndex) {
-  const endIndex = Math.min(startIndex + BATCH_SIZE, members.length);
-  const currentBatch = members.slice(startIndex, endIndex);
-  
+  const members = currentTask.members;
+  const message = currentTask.message;
+  const interaction = currentTask.interaction;
   let sent = 0;
   let closed = 0;
-  let rateLimited = false;
 
-  for (const member of currentBatch) {
-    if (member && member.user && !member.user.bot) {
-      if (messagesSentLastMinute >= MAX_MESSAGES_PER_MINUTE) {
-        rateLimited = true;
-        break;
-      }
+  const totalMembers = members.length;
+  const estimatedTime = (totalMembers / MESSAGE_RATE).toFixed(2);
 
-      try {
-        await member.send(`${member.user}\n${message}`);
-        messagesSentLastMinute++;
-        sent++;
-      } catch (error) {
-        if (error.code === 50007) {
-          closed++;
-        }
+  await interaction.channel.send(`⏳ الوقت المتوقع لإتمام الإرسال: ${estimatedTime} ثانية`);
+
+  for (const member of members) {
+    try {
+      await member.send(`${member.user}\n${message}`);
+      sent++;
+      await interaction.channel.send(`✅ تم الإرسال إلى: ${member.user.tag}`);
+    } catch (error) {
+      if (error.code === 50007) {
+        closed++;
+        await interaction.channel.send(`⚠️ خاص مغلق: ${member.user.tag}`);
       }
     }
+    await new Promise(resolve => setTimeout(resolve, MESSAGE_DELAY));
   }
 
-  const progress = Math.floor((endIndex / members.length) * 100);
-  const progressEmbed = new MessageEmbed()
+  const finalEmbed = new MessageEmbed()
     .setColor('#00ff00')
-    .setTitle('🔄 تقدم البرودكاست')
-    .setDescription(
-      `تم الإرسال: ${sent}\nخاص مغلق: ${closed}\nالتقدم: ${progress}%` +
-      (rateLimited ? '\n⚠️ تم إيقاف الإرسال مؤقتاً لتجنب تجاوز حد الرسائل' : '')
-    );
+    .setTitle('✅ اكتمل البرودكاست')
+    .setDescription(`تم إرسال الرسالة بنجاح!\n\nتم الإرسال: ${sent}\nخاص مغلق: ${closed}`);
 
-  await interaction.editReply({ embeds: [progressEmbed], ephemeral: true });
+  await interaction.channel.send({ embeds: [finalEmbed] });
 
-  if (rateLimited) {
-    const waitTime = 60000 - (Date.now() - lastMessageTimestamp);
-    await new Promise(resolve => setTimeout(resolve, waitTime));
-    messagesSentLastMinute = 0;
-    lastMessageTimestamp = Date.now();
-    
-    await sendMessagesToBatch(members, message, interaction, startIndex);
-  } else if (endIndex < members.length) {
-    messageQueue[0].startIndex = endIndex;
-    setTimeout(processMessageQueue, BATCH_DELAY);
-  } else {
-    const finalEmbed = new MessageEmbed()
-      .setColor('#00ff00')
-      .setTitle('✅ اكتمل البرودكاست')
-      .setDescription(`تم إرسال الرسالة بنجاح!\n\nتم الإرسال: ${sent}\nخاص مغلق: ${closed}`);
-
-    await interaction.editReply({ embeds: [finalEmbed], ephemeral: true });
-    
-    messageQueue.shift();
-    isProcessing = false;
-    processMessageQueue();
-  }
+  messageQueue.shift();
+  isProcessing = false;
+  if (messageQueue.length > 0) processMessageQueue();
 }
 
 client.on('interactionCreate', async interaction => {
@@ -177,9 +131,9 @@ client.on('interactionCreate', async interaction => {
 
   if (customId.startsWith('broadcast-')) {
     if (!interaction.member.roles.cache.has(config.adminRole)) {
-      await interaction.reply({ 
-        content: 'عذراً، أنت لا تملك الرتبة المطلوبة لاستخدام هذا الأمر',
-        ephemeral: true 
+      await interaction.reply({
+        content: '❌ عذراً، أنت لا تملك الصلاحيات لاستخدام هذا الأمر.',
+        ephemeral: true
       });
       return;
     }
@@ -256,38 +210,37 @@ client.on('interactionCreate', async interaction => {
     } else if (customId === 'user-modal') {
       const userId = interaction.fields.getTextInputValue('userId');
       const targetMember = members.get(userId);
-      
+
       if (!targetMember) {
-        await interaction.editReply('لم يتم العثور على المستخدم المحدد.');
+        await interaction.editReply('❌ لم يتم العثور على المستخدم المحدد.');
         return;
       }
-      
+
       targetMembers = [targetMember];
     }
 
     if (targetMembers.length === 0) {
-      await interaction.editReply('لا يوجد أعضاء مستهدفين للإرسال.');
+      await interaction.editReply('❌ لا يوجد أعضاء مستهدفين للإرسال.');
       return;
     }
 
     messageQueue.push({
       members: targetMembers,
       message: message,
-      interaction: interaction,
-      startIndex: 0
+      interaction: interaction
     });
 
     if (messageQueue.length > 1) {
-      await interaction.editReply('تم إضافة البرودكاست إلى قائمة الانتظار. سيتم إرساله بعد اكتمال البرودكاست الحالي.');
+      await interaction.editReply('⏳ تم إضافة البرودكاست إلى قائمة الانتظار.');
     } else {
       processMessageQueue();
     }
 
   } catch (error) {
     console.error('Error in modal submission:', error);
-    await interaction.editReply({ 
-      content: 'حدث خطأ أثناء معالجة طلبك. الرجاء المحاولة مرة أخرى.', 
-      ephemeral: true 
+    await interaction.editReply({
+      content: '❌ حدث خطأ أثناء معالجة طلبك. الرجاء المحاولة مرة أخرى.',
+      ephemeral: true
     });
   }
 });
